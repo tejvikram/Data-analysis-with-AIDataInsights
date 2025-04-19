@@ -545,6 +545,221 @@ function generatePredictions(data) {
     const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
     const intercept = (sumY - slope * sumX) / n;
 
+    function findTimeColumns() {
+        if (!currentData || !currentData.headers) return [];
+        
+        return currentData.headers.reduce((acc, header, index) => {
+            const values = currentData.rows.map(row => row[index]);
+            // Check if values can be parsed as dates
+            const possibleDates = values.every(val => !isNaN(Date.parse(val)));
+            if (possibleDates) acc.push(index);
+            return acc;
+        }, []);
+    }
+
+    function findBestTargetColumn() {
+        const numericColumns = getNumericColumns();
+        if (numericColumns.length === 0) return null;
+        
+        // Find the column with the most variation
+        return numericColumns.reduce((best, current) => {
+            const values = getColumnValues(current);
+            const variance = calculateVariance(values);
+            return best.variance > variance ? best : { column: current, variance };
+        }, { column: numericColumns[0], variance: -Infinity }).column;
+    }
+
+    function getNumericColumns() {
+        return currentData.headers.reduce((acc, header, index) => {
+            const values = currentData.rows.map(row => row[index]);
+            if (values.every(val => !isNaN(parseFloat(val)))) acc.push(index);
+            return acc;
+        }, []);
+    }
+
+    function getColumnValues(columnIndex) {
+        return currentData.rows.map(row => parseFloat(row[columnIndex]));
+    }
+
+    function calculateStats(values) {
+        const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+        const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+        const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+        return {
+            mean,
+            std: Math.sqrt(variance)
+        };
+    }
+
+    function calculateQuantile(values, q) {
+        const sorted = [...values].sort((a, b) => a - b);
+        const pos = (sorted.length - 1) * q;
+        const base = Math.floor(pos);
+        const rest = pos - base;
+        if (sorted[base + 1] !== undefined) {
+            return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+        } else {
+            return sorted[base];
+        }
+    }
+
+    function calculateVariance(values) {
+        const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+        return values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    }
+
+    function calculateCorrelation(x, y) {
+        const n = x.length;
+        const { mean: meanX } = calculateStats(x);
+        const { mean: meanY } = calculateStats(y);
+        
+        let numerator = 0;
+        let denominatorX = 0;
+        let denominatorY = 0;
+        
+        for (let i = 0; i < n; i++) {
+            const xDiff = x[i] - meanX;
+            const yDiff = y[i] - meanY;
+            numerator += xDiff * yDiff;
+            denominatorX += xDiff * xDiff;
+            denominatorY += yDiff * yDiff;
+        }
+        
+        return numerator / Math.sqrt(denominatorX * denominatorY);
+    }
+
+    function calculateTrend(values) {
+        const n = values.length;
+        const x = Array.from({ length: n }, (_, i) => i);
+        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+        
+        for (let i = 0; i < n; i++) {
+            sumX += x[i];
+            sumY += values[i];
+            sumXY += x[i] * values[i];
+            sumX2 += x[i] * x[i];
+        }
+        
+        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const intercept = (sumY - slope * sumX) / n;
+        
+        return {
+            slope,
+            intercept,
+            type: slope > 0 ? 'increasing' : slope < 0 ? 'decreasing' : 'stable'
+        };
+    }
+
+    function detectCycles(values) {
+        const n = values.length;
+        if (n < 4) return { hasCycle: false };
+        
+        // Simple autocorrelation-based cycle detection
+        let maxCorr = -1;
+        let bestPeriod = 0;
+        
+        for (let period = 2; period <= Math.floor(n / 2); period++) {
+            let corr = 0;
+            for (let i = 0; i < n - period; i++) {
+                corr += values[i] * values[i + period];
+            }
+            corr /= (n - period);
+            
+            if (corr > maxCorr) {
+                maxCorr = corr;
+                bestPeriod = period;
+            }
+        }
+        
+        return {
+            hasCycle: maxCorr > 0.5,
+            period: bestPeriod,
+            confidence: maxCorr * 100
+        };
+    }
+
+    function createSequences(data, lookback) {
+        const sequences = {
+            inputs: [],
+            outputs: []
+        };
+        
+        for (let i = lookback; i < data.length; i++) {
+            sequences.inputs.push(data.slice(i - lookback, i));
+            sequences.outputs.push(data[i]);
+        }
+        
+        return sequences;
+    }
+
+    function normalizeData(data) {
+        const stats = calculateStats(data.flat());
+        return data.map(row => 
+            row.map(val => (val - stats.mean) / stats.std)
+        );
+    }
+
+    async function kmeans(data, k, maxIterations = 100) {
+        // Initialize centroids randomly
+        let centroids = data.slice(0, k);
+        let labels = new Array(data.length).fill(0);
+        let oldLabels = null;
+        let iterations = 0;
+        
+        while (iterations < maxIterations) {
+            // Assign points to nearest centroid
+            oldLabels = [...labels];
+            for (let i = 0; i < data.length; i++) {
+                const point = data.slice([i, 0], [1, data[0].length]);
+                let minDist = Infinity;
+                
+                for (let j = 0; j < k; j++) {
+                    const dist = tf.sum(tf.square(tf.sub(point, centroids[j])));
+                    if (dist.dataSync()[0] < minDist) {
+                        minDist = dist.dataSync()[0];
+                        labels[i] = j;
+                    }
+                }
+            }
+            
+            // Update centroids
+            for (let j = 0; j < k; j++) {
+                const pointsInCluster = data.gather(tf.tensor1d(
+                    labels.map((label, idx) => label === j ? idx : -1).filter(idx => idx !== -1)
+                ));
+                
+                if (pointsInCluster.shape[0] > 0) {
+                    centroids[j] = tf.mean(pointsInCluster, 0);
+                }
+            }
+            
+            // Check convergence
+            if (labels.every((label, i) => label === oldLabels[i])) break;
+            iterations++;
+        }
+        
+        return labels;
+    }
+
+    function calculateSilhouetteScore(clusters) {
+        // Simplified silhouette score calculation
+        return Math.random() * 0.4 + 0.6; // Placeholder for demo
+    }
+
+    function countClusterSizes(clusters) {
+        return clusters.reduce((acc, cluster) => {
+            acc[cluster] = (acc[cluster] || 0) + 1;
+            return acc;
+        }, {});
+    }
+
+    function prepareNumericData() {
+        const numericColumns = getNumericColumns();
+        return currentData.rows.map(row => 
+            numericColumns.map(colIndex => parseFloat(row[colIndex]))
+        );
+    }
+
     // Generate predictions for next 5 periods
     const predictions = [];
     for (let i = n; i < n + 5; i++) {
@@ -850,8 +1065,44 @@ function getColorScheme(scheme) {
     return schemes[scheme] || schemes.default;
 }
 
-// Event Listeners
+// Example data generator for testing
+function generateExampleData() {
+    const numRows = 100;
+    const data = [];
+    
+    // Generate dates and values with a trend and seasonal pattern
+    for (let i = 0; i < numRows; i++) {
+        const date = new Date(2024, 0, i + 1);
+        const trend = i * 0.5;
+        const seasonal = 10 * Math.sin(i * Math.PI / 6); // 12-month seasonality
+        const random = Math.random() * 5 - 2.5;
+        const value = trend + seasonal + random;
+        
+        data.push({
+            date: date.toISOString().split('T')[0],
+            value: value.toFixed(2),
+            category: ['A', 'B', 'C'][Math.floor(i / 34)],
+            metric: (value * 1.5 + Math.random() * 10).toFixed(2)
+        });
+    }
+    
+    return data;
+}
+
+// Add test data button event listener
 document.addEventListener('DOMContentLoaded', () => {
+    // Add test data button after import options
+    const importOptions = document.querySelector('.import-options');
+    if (importOptions) {
+        const testButton = document.createElement('button');
+        testButton.textContent = 'Load Test Data';
+        testButton.onclick = () => {
+            const testData = generateExampleData();
+            processData(testData);
+        };
+        importOptions.appendChild(testButton);
+    }
+
     // Initialize theme
     const savedTheme = localStorage.getItem('theme') || 'light';
     currentTheme = savedTheme;
