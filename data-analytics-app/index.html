@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Data Analytics Platform</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Advanced Data Analytics Platform</h1>
+            <div class="user-controls">
+                <select id="userRole">
+                    <option value="admin">Admin</option>
+                    <option value="analyst">Analyst</option>
+                    <option value="viewer">Viewer</option>
+                </select>
+                <button onclick="toggleTheme()">🌓 Toggle Theme</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="data-import-section">
+                    <h2>Data Import</h2>
+                    <div class="import-options">
+                        <div class="import-option">
+                            <input type="file" id="csvInput" accept=".csv" />
+                            <button onclick="handleCSVUpload()">Import CSV</button>
+                        </div>
+                        <div class="import-option">
+                            <input type="file" id="excelInput" accept=".xlsx,.xls" />
+                            <button onclick="handleExcelUpload()">Import Excel</button>
+                        </div>
+                        <div class="import-option">
+                            <input type="file" id="jsonInput" accept=".json" />
+                            <button onclick="handleJSONUpload()">Import JSON</button>
+                        </div>
+                    </div>
+                    <div class="real-time-sync">
+                        <label>
+                            <input type="checkbox" id="realTimeSync" onchange="toggleRealTimeSync()">
+                            Enable Real-Time Sync
+                        </label>
+                    </div>
+                </div>
+
+                <div class="chart-controls">
+                    <h2>Chart Controls</h2>
+                    <div class="control-group">
+                        <label for="chartType">Chart Type:</label>
+                        <select id="chartType" onchange="updateChart()">
+                            <option value="bar">Bar Chart</option>
+                            <option value="line">Line Chart</option>
+                            <option value="scatter">Scatter Plot</option>
+                            <option value="pie">Pie Chart</option>
+                            <option value="heatmap">Heatmap</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="dataColumn">Data Column:</label>
+                        <select id="dataColumn" onchange="updateChart()">
+                            <option value="">Select Data Column</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="aggregationType">Aggregation:</label>
+                        <select id="aggregationType" onchange="updateChart()">
+                            <option value="none">No Aggregation</option>
+                            <option value="sum">Sum</option>
+                            <option value="average">Average</option>
+                            <option value="count">Count</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="colorScheme">Color Scheme:</label>
+                        <select id="colorScheme" onchange="updateChartColors()">
+                            <option value="default">Default</option>
+                            <option value="pastel">Pastel</option>
+                            <option value="dark">Dark</option>
+                            <option value="monochrome">Monochrome</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="chartTitle">Chart Title:</label>
+                        <input type="text" id="chartTitle" placeholder="Enter chart title" onchange="updateChartOptions()">
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="showLegend" checked onchange="updateChartOptions()">
+                            Show Legend
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="legendPosition">Legend Position:</label>
+                        <select id="legendPosition" onchange="updateChartOptions()">
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                            <option value="left">Left</option>
+                            <option value="right">Right</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="beginAtZero" checked onchange="updateChartOptions()">
+                            Begin at Zero
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="showGrid" checked onchange="updateChartOptions()">
+                            Show Grid
+                        </label>
+                    </div>
+                </div>
+
+                <div class="filter-section">
+                    <h2>Data Filters</h2>
+                    <div class="filter-controls">
+                        <div class="control-group">
+                            <label for="filterColumn">Column:</label>
+                            <select id="filterColumn">
+                                <option value="">Select Column</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="filterType">Filter Type:</label>
+                            <select id="filterType">
+                                <option value="equals">Equals</option>
+                                <option value="contains">Contains</option>
+                                <option value="greaterThan">Greater Than</option>
+                                <option value="lessThan">Less Than</option>
+                                <option value="between">Between</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="filterValue">Value:</label>
+                            <input type="text" id="filterValue" placeholder="Enter filter value">
+                        </div>
+                        <button onclick="applyFilter()">Apply Filter</button>
+                    </div>
+                    <div class="active-filters">
+                        <h3>Active Filters</h3>
+                        <ul id="activeFiltersList"></ul>
+                    </div>
+                </div>
+
+                <div class="analysis-tools">
+                    <h2>Analysis Tools</h2>
+                    <div class="tool-buttons">
+                        <button onclick="performPredictiveAnalysis()">Predictive Analysis</button>
+                        <button onclick="showDataCleaning()">Data Cleaning</button>
+                        <button onclick="showETLTools()">ETL Tools</button>
+                        <button onclick="showMLModels()">ML Models</button>
+                        <button onclick="showStatisticalAnalysis()">Statistical Analysis</button>
+                    </div>
+                </div>
+
+                <div class="export-section">
+                    <h2>Export</h2>
+                    <button onclick="exportReport()">Export Report</button>
+                </div>
+            </div>
+
+            <div class="main-panel">
+                <div class="dashboard-container">
+                    <div id="chart-container" class="chart-wrapper">
+                        <canvas id="dataChart"></canvas>
+                    </div>
+
+                    <div class="insights-panel">
+                        <div id="suggestions" class="insights-section collapsible">
+                            <button class="collapsible-header">
+                                <h2>💡 Data Insights</h2>
+                                <span class="collapse-icon">▼</span>
+                            </button>
+                            <div id="suggestion-content" class="collapsible-content"></div>
+                        </div>
+
+                        <div id="ml-insights" class="insights-section collapsible">
+                            <button class="collapsible-header">
+                                <h2>🤖 ML Predictions</h2>
+                                <span class="collapse-icon">▼</span>
+                            </button>
+                            <div id="ml-content" class="collapsible-content"></div>
+                        </div>
+
+                        <div id="statistical-analysis" class="insights-section collapsible">
+                            <button class="collapsible-header">
+                                <h2>📊 Statistical Analysis</h2>
+                                <span class="collapse-icon">▼</span>
+                            </button>
+                            <div id="stats-content" class="collapsible-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="collaboration-panel">
+                    <h2>Collaboration</h2>
+                    <div class="collaborators-section">
+                        <h3>Collaborators</h3>
+                        <div class="add-collaborator">
+                            <input type="email" id="collaboratorEmail" placeholder="Enter email address">
+                            <button onclick="addCollaborator()">Add Collaborator</button>
+                        </div>
+                        <ul id="collaboratorsList"></ul>
+                    </div>
+                    <div class="comments-section">
+                        <h3>Comments & Annotations</h3>
+                        <div id="commentsList"></div>
+                        <div class="comment-input">
+                            <textarea id="commentInput" placeholder="Add a comment..."></textarea>
+                            <button onclick="addComment()">Add Comment</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="dataCleaningModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Data Cleaning Tools</h2>
+            <div class="cleaning-options">
+                <button onclick="handleMissingValues()">Handle Missing Values</button>
+                <button onclick="removeDuplicates()">Remove Duplicates</button>
+                <button onclick="normalizeData()">Normalize Data</button>
+            </div>
+            <button onclick="closeModal('dataCleaningModal')" class="close-btn">Close</button>
+        </div>
+    </div>
+
+    <div id="mlModelsModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Machine Learning Models</h2>
+            <div class="ml-options">
+                <button onclick="runForecasting()">Run Forecasting</button>
+                <button onclick="runClassification()">Run Classification</button>
+                <button onclick="runRegression()">Run Regression</button>
+            </div>
+            <button onclick="closeModal('mlModelsModal')" class="close-btn">Close</button>
+        </div>
+    </div>
+
+    <div id="statisticalModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Statistical Analysis</h2>
+            <div class="stats-options">
+                <button onclick="runCorrelationAnalysis()">Correlation Analysis</button>
+                <button onclick="runHypothesisTesting()">Hypothesis Testing</button>
+                <button onclick="runSentimentAnalysis()">Sentiment Analysis</button>
+            </div>
+            <button onclick="closeModal('statisticalModal')" class="close-btn">Close</button>
+        </div>
+    </div>
+
+    <div id="predictionsModal" class="modal hidden">
+        <div class="modal-content">
+            <div id="predictionsContent"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Initialize collapsible sections
+        document.addEventListener('DOMContentLoaded', () => {
+            const collapsibles = document.querySelectorAll('.collapsible');
+            
+            collapsibles.forEach(collapsible => {
+                const header = collapsible.querySelector('.collapsible-header');
+                
+                header.addEventListener('click', () => {
+                    collapsible.classList.toggle('collapsed');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
