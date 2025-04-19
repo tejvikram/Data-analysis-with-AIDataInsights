@@ -212,29 +212,147 @@ function preparePieChartData(columnData) {
 }
 
 function prepareHeatmapData(columnData) {
-    // Implementation for heatmap visualization
-    const uniqueValues = [...new Set(columnData)];
-    const valueToIndex = {};
-    uniqueValues.forEach((value, index) => {
-        valueToIndex[value] = index;
-    });
+    if (!currentData || !currentData.headers) return null;
 
-    const matrix = Array(uniqueValues.length).fill().map(() => Array(uniqueValues.length).fill(0));
-    
-    for (let i = 0; i < columnData.length - 1; i++) {
-        const currentValue = columnData[i];
-        const nextValue = columnData[i + 1];
-        matrix[valueToIndex[currentValue]][valueToIndex[nextValue]]++;
+    // Find numeric columns for heatmap
+    const numericColumns = currentData.headers.reduce((acc, _, index) => {
+        const values = currentData.rows.map(row => row[index]);
+        if (values.every(val => !isNaN(parseFloat(val)))) acc.push(index);
+        return acc;
+    }, []);
+
+    if (numericColumns.length < 2) {
+        alert('Need at least two numeric columns for heatmap');
+        return null;
     }
 
+    // Get the second numeric column that's different from the current one
+    const columnIndex = currentData.headers.indexOf(columnData);
+    const secondColumnIndex = numericColumns.find(index => index !== columnIndex);
+
+    // Create 2D data array for heatmap
+    const xValues = currentData.rows.map(row => parseFloat(row[columnIndex]));
+    const yValues = currentData.rows.map(row => parseFloat(row[secondColumnIndex]));
+
+    // Create bins for both axes
+    const numBins = 10;
+    const xBins = createBins(xValues, numBins);
+    const yBins = createBins(yValues, numBins);
+
+    // Initialize heatmap data
+    const heatmapData = Array(numBins).fill(0).map(() => Array(numBins).fill(0));
+
+    // Fill heatmap data
+    for (let i = 0; i < xValues.length; i++) {
+        const xBin = findBin(xValues[i], xBins);
+        const yBin = findBin(yValues[i], yBins);
+        if (xBin > -1 && yBin > -1) {
+            heatmapData[yBin][xBin]++;
+        }
+    }
+
+    // Create labels for axes
+    const xLabels = xBins.slice(0, -1).map((val, i) => 
+        `${val.toFixed(1)}-${xBins[i + 1].toFixed(1)}`
+    );
+    const yLabels = yBins.slice(0, -1).map((val, i) => 
+        `${val.toFixed(1)}-${yBins[i + 1].toFixed(1)}`
+    );
+
     return {
-        labels: uniqueValues,
-        datasets: matrix.map((row, i) => ({
-            label: uniqueValues[i],
-            data: row,
-            backgroundColor: row.map(value => `rgba(75, 192, 192, ${value / Math.max(...row)})`)
-        }))
+        type: 'heatmap',
+        data: {
+            labels: yLabels,
+            datasets: [{
+                data: heatmapData.map((row, i) => 
+                    row.map((value, j) => ({
+                        x: j,
+                        y: i,
+                        v: value
+                    }))
+                ).flat(),
+                backgroundColor: function(context) {
+                    if (!context.raw) return 'rgba(0, 0, 0, 0)';
+                    const value = context.raw.v;
+                    const maxValue = Math.max(...heatmapData.flat());
+                    const intensity = value / maxValue;
+                    return `rgba(52, 152, 219, ${intensity})`;
+                }
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return `${currentData.headers[columnIndex]} vs ${currentData.headers[secondColumnIndex]}`;
+                        },
+                        label: function(context) {
+                            const dataPoint = context.raw;
+                            return [
+                                `X: ${xLabels[dataPoint.x]}`,
+                                `Y: ${yLabels[dataPoint.y]}`,
+                                `Count: ${dataPoint.v}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    offset: true,
+                    grid: { display: false },
+                    ticks: {
+                        stepSize: 1,
+                        callback: function(value) {
+                            return xLabels[value] || '';
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: currentData.headers[columnIndex]
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    offset: true,
+                    grid: { display: false },
+                    ticks: {
+                        stepSize: 1,
+                        callback: function(value) {
+                            return yLabels[value] || '';
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: currentData.headers[secondColumnIndex]
+                    }
+                }
+            }
+        }
     };
+}
+
+// Helper functions for heatmap
+function createBins(values, numBins) {
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const step = (max - min) / numBins;
+    return Array(numBins + 1).fill(0)
+        .map((_, i) => min + step * i);
+}
+
+function findBin(value, bins) {
+    for (let i = 0; i < bins.length - 1; i++) {
+        if (value >= bins[i] && value < bins[i + 1]) {
+            return i;
+        }
+    }
+    return value === bins[bins.length - 1] ? bins.length - 2 : -1;
 }
 
 function prepareBarLineScatterData(columnData, columnName, isNumeric, aggregationType) {
